@@ -4,11 +4,10 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/urfave/cli/v2"
-
 	"github.com/RonIT-401/worker-service/cmd"
 	msentry "github.com/RonIT-401/worker-service/internal/app/monitor/sentry"
 	"github.com/RonIT-401/worker-service/internal/pkg/constant"
+	"github.com/urfave/cli/v2"
 )
 
 func main() {
@@ -18,6 +17,7 @@ func main() {
 		Usage:   "MoM Boilerplate V2 — шаблон Go сервиса",
 		Commands: []*cli.Command{
 			cmd.WebServer(),
+			cmd.SubscribeOrderCreated(),
 		},
 		Flags: []cli.Flag{
 			&cli.BoolFlag{
