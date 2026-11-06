@@ -17,6 +17,7 @@ import (
 	eprocessor "github.com/RonIT-401/worker-service/internal/app/processor/event"
 	rprocessor "github.com/RonIT-401/worker-service/internal/app/processor/http"
 	mmonitor "github.com/RonIT-401/worker-service/internal/app/processor/monitor"
+	rcredis "github.com/RonIT-401/worker-service/internal/app/repository/conn/redis"
 	"github.com/RonIT-401/worker-service/internal/app/util"
 	"github.com/RonIT-401/worker-service/internal/pkg/broker"
 	"github.com/RonIT-401/worker-service/internal/pkg/broker/codec"
@@ -46,6 +47,9 @@ type Builder struct {
 
 	// Шина события order.created (consumer)
 	busOrderCreated broker.Bus[entity.EventOrderCreated]
+
+	// Подключения
+	connRedis *rcredis.Client
 
 	// TODO: добавить зависимости по мере появления (repositories, services, handlers, monitors).
 }
@@ -153,6 +157,23 @@ func (b *Builder) BuildConsumerOrderCreated() {
 
 		b.processors = append(b.processors, eprocessor.NewOrderCreatedEventsCatcher(handler, bus))
 	}, b.kafkaClient)
+}
+
+////////////////////////////////////////////////////////////////////////////////
+///// CONNECTIONS //////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
+
+// BuildConnRedis открывает подключение к Redis и проверяет его через Ping.
+func (b *Builder) BuildConnRedis() {
+	b.exec(func(b *Builder) {
+		conn, err := rcredis.NewClient(b.ctx, config.Root.Repository.Redis)
+		if err != nil {
+			b.err = fmt.Errorf("init redis conn: %w", err)
+			return
+		}
+
+		b.connRedis = conn
+	})
 }
 
 ////////////////////////////////////////////////////////////////////////////////
