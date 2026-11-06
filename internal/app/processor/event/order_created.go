@@ -28,5 +28,7 @@ func (p *orderCreatedProc) StartAsync(ctx context.Context, wg *sync.WaitGroup) {
 		log.Fatal().Err(err).Msg("failed to subscribe to order created topic")
 	}
 
-	log.Info().Msg("subscription to order created topic requested")
+	log.Info().
+		Str("topic_name", p.bus.QueueName()).
+		Msg("subscription to order created topic requested")
 }

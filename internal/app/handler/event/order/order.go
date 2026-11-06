@@ -19,7 +19,7 @@ func NewHandler() ehandler.OrderCreated {
 func (h *handler) CallbackOrderCreated(
 	ctx context.Context, ev *entity.EventOrderCreated, _ []broker.Header,
 ) error {
-	log.Info().Ctx(ctx).EmbedObject(ev).Msg("received order created event")
+	log.Info().Ctx(ctx).EmbedObject(ev).Msg("Получено событие order.created")
 
 	if ev.OrderGUID == "" {
 		return broker.NotCriticalError(
