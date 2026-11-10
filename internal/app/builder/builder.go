@@ -10,6 +10,7 @@ import (
 	"sync"
 	"syscall"
 
+	"github.com/RonIT-401/worker-service/internal/app/client/fixer"
 	"github.com/RonIT-401/worker-service/internal/app/config"
 	"github.com/RonIT-401/worker-service/internal/app/entity"
 	eorder "github.com/RonIT-401/worker-service/internal/app/handler/event/order"
@@ -17,7 +18,11 @@ import (
 	eprocessor "github.com/RonIT-401/worker-service/internal/app/processor/event"
 	rprocessor "github.com/RonIT-401/worker-service/internal/app/processor/http"
 	mmonitor "github.com/RonIT-401/worker-service/internal/app/processor/monitor"
+	"github.com/RonIT-401/worker-service/internal/app/repository"
 	rcredis "github.com/RonIT-401/worker-service/internal/app/repository/conn/redis"
+	rcurrency "github.com/RonIT-401/worker-service/internal/app/repository/currency"
+	"github.com/RonIT-401/worker-service/internal/app/service"
+	scurrency "github.com/RonIT-401/worker-service/internal/app/service/currency"
 	"github.com/RonIT-401/worker-service/internal/app/util"
 	"github.com/RonIT-401/worker-service/internal/pkg/broker"
 	"github.com/RonIT-401/worker-service/internal/pkg/broker/codec"
@@ -51,7 +56,14 @@ type Builder struct {
 	// Подключения
 	connRedis *rcredis.Client
 
-	// TODO: добавить зависимости по мере появления (repositories, services, handlers, monitors).
+	// Внешние клиенты
+	clientFixer *fixer.Client
+
+	// Репозитории
+	repoCurrencyRate repository.CurrencyRate
+
+	// Сервисы
+	currencyService service.Currency
 }
 
 // NewBuilder создаёт новый Builder и настраивает обработку сигналов OS.
@@ -174,6 +186,42 @@ func (b *Builder) BuildConnRedis() {
 
 		b.connRedis = conn
 	})
+}
+
+////////////////////////////////////////////////////////////////////////////////
+///// CLIENTS //////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
+
+// BuildClientFixer создаёт HTTP-клиент Fixer API (курсы валют).
+func (b *Builder) BuildClientFixer() {
+	b.exec(func(b *Builder) {
+		b.clientFixer = fixer.NewClient(config.Root.Client.Fixer)
+	})
+}
+
+////////////////////////////////////////////////////////////////////////////////
+///// REPOSITORIES  ////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
+
+// BuildRepoCurrencyRate создаёт Redis-кэш курсов валют.
+func (b *Builder) BuildRepoCurrencyRate() {
+	b.exec(func(b *Builder) {
+		b.repoCurrencyRate = rcurrency.NewRepoFromRedis(
+			b.connRedis.Client,
+			config.Root.Client.Fixer.CacheTTL,
+		)
+	}, b.connRedis)
+}
+
+////////////////////////////////////////////////////////////////////////////////
+///// SERVICES /////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
+
+// BuildServiceCurrency собирает сервис курсов валют (cache-aside: Redis -> Fixer).
+func (b *Builder) BuildServiceCurrency() {
+	b.exec(func(b *Builder) {
+		b.currencyService = scurrency.NewService(b.clientFixer, b.repoCurrencyRate)
+	}, b.clientFixer, b.repoCurrencyRate)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
