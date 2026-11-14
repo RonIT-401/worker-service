@@ -23,6 +23,7 @@ import (
 	rcurrency "github.com/RonIT-401/worker-service/internal/app/repository/currency"
 	"github.com/RonIT-401/worker-service/internal/app/service"
 	scurrency "github.com/RonIT-401/worker-service/internal/app/service/currency"
+	sdelivery "github.com/RonIT-401/worker-service/internal/app/service/delivery"
 	"github.com/RonIT-401/worker-service/internal/app/util"
 	"github.com/RonIT-401/worker-service/internal/pkg/broker"
 	"github.com/RonIT-401/worker-service/internal/pkg/broker/codec"
@@ -53,6 +54,9 @@ type Builder struct {
 	// Шина события order.created (consumer)
 	busOrderCreated broker.Bus[entity.EventOrderCreated]
 
+	// Шина события order.delivery.calculated (producer)
+	busOrderDeliveryCalculated broker.Bus[entity.EventOrderDeliveryCalculated]
+
 	// Подключения
 	connRedis *rcredis.Client
 
@@ -64,6 +68,7 @@ type Builder struct {
 
 	// Сервисы
 	currencyService service.Currency
+	deliveryService service.Delivery
 }
 
 // NewBuilder создаёт новый Builder и настраивает обработку сигналов OS.
@@ -165,9 +170,29 @@ func (b *Builder) BuildConsumerOrderCreated() {
 
 		b.busOrderCreated = bus
 
-		handler := eorder.NewHandler()
+		handler := eorder.NewHandler(b.deliveryService, b.busOrderDeliveryCalculated)
 
 		b.processors = append(b.processors, eprocessor.NewOrderCreatedEventsCatcher(handler, bus))
+	}, b.kafkaClient, b.deliveryService, b.busOrderDeliveryCalculated)
+}
+
+// BuildBusOrderDeliveryCalculated создаёт publish-шину топика order.delivery.calculated.
+func (b *Builder) BuildBusOrderDeliveryCalculated() {
+	b.exec(func(b *Builder) {
+		cfg := config.Root.Broker.Kafka
+
+		bus, err := broker.NewBus[entity.EventOrderDeliveryCalculated](
+			b.kafkaClient,
+			codec.NewCodecJson[entity.EventOrderDeliveryCalculated](),
+			cfg.ModelOrder.DeliveryCalculated.Topic,
+			cfg.ConsumerGroup,
+		)
+		if err != nil {
+			b.err = fmt.Errorf("init order.delivery.calculated bus: %w", err)
+			return
+		}
+
+		b.busOrderDeliveryCalculated = bus
 	}, b.kafkaClient)
 }
 
@@ -222,6 +247,13 @@ func (b *Builder) BuildServiceCurrency() {
 	b.exec(func(b *Builder) {
 		b.currencyService = scurrency.NewService(b.clientFixer, b.repoCurrencyRate)
 	}, b.clientFixer, b.repoCurrencyRate)
+}
+
+// BuildServiceDelivery собирает сервис расчёта доставки (база 10 EUR -> валюта заказа).
+func (b *Builder) BuildServiceDelivery() {
+	b.exec(func(b *Builder) {
+		b.deliveryService = sdelivery.NewService(b.currencyService)
+	}, b.currencyService)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
